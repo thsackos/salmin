@@ -18,6 +18,12 @@ const MAX_PATH_LENGTH = 1024 * 8;
 const APP_NAME = "salmin";
 const CONFIG_FILE = "salmin.conf";
 
+const ArgsParsed = struct {
+    currency: bool = false,
+    base: bool = false,
+    top: bool = false,
+};
+
 const Currency = struct {
     currency_code: []const u8,
     country_and_currency: []const u8,
@@ -91,41 +97,55 @@ pub fn main() !void {
         warn_continue_with_defaults();
     }
 
-    var top_set = false;
-    var base_set = false;
-    if (args.len == 4) {
-        const v = try std.fmt.parseFloat(f64, args[3]);
-        if (std.mem.eql(u8, "--base-salary"[0..], args[2])) {
-            base_set = true;
-            conf.salary_base = v;
-        } else if (std.mem.eql(u8, "--top-salary"[0..], args[2])) {
-            top_set = true;
-            conf.salary_top = v;
-        } else {
-            return error.UnknownArgument;
-        }
-    }
-
-    if (args.len == 6) {
-        const v = try std.fmt.parseFloat(f64, args[5]);
-        if (std.mem.eql(u8, "--base-salary"[0..], args[4])) {
-            if (base_set) {
-                return error.DupliateSalaryArgument;
-            }
-
-            conf.salary_base = v;
-        } else if (std.mem.eql(u8, "--top-salary"[0..], args[4])) {
-            if (top_set) {
-                return error.DupliateSalaryArgument;
-            }
-
-            conf.salary_top = v;
-        } else {
-            return error.UnknownArgument;
-        }
-    }
+    try override_conf_with_arguments(args, &conf);
 
     try salmin(conf, participants);
+}
+
+fn override_conf_with_arguments(args: [][:0]const u8, conf: *Conf) !void {
+    var args_parsed: ArgsParsed = .{};
+
+    var i: usize = 2;
+    while (i < args.len) {
+        if (std.mem.eql(u8, "--top-salary", args[i])) {
+            if (args_parsed.top) {
+                return error.DuplicateArgumentsSpecified;
+            }
+
+            const v = try std.fmt.parseFloat(f64, args[i + 1]);
+            conf.salary_top = v;
+
+            args_parsed.top = true;
+            i += 2;
+        } else if (std.mem.eql(u8, "--base-salary", args[i])) {
+            if (args_parsed.base) {
+                return error.DuplicateArgumentsSpecified;
+            }
+
+            const v = try std.fmt.parseFloat(f64, args[i + 1]);
+            conf.salary_base = v;
+
+            args_parsed.base = true;
+            i += 2;
+        } else if (std.mem.eql(u8, "--currency", args[i])) {
+            if (args_parsed.currency) {
+                return error.DuplicateArgumentsSpecified;
+            }
+
+            if (args[i + 1].len != 3) {
+                print("ERROR: Invalid currency code '{s}'. Please choose one of the three character codes from https://www.xe.com/symbols/\n", .{args[i + 1]});
+                return error.InvalidCurrencyCode;
+            }
+
+            std.mem.copyForwards(u8, conf.currency_code[0..3], args[i + 1]);
+
+            args_parsed.currency = true;
+            i += 2;
+        } else {
+            print("ERROR: Unknown argument '{s}'\n", .{args[i]});
+            return error.UnknownArgument;
+        }
+    }
 }
 
 // Assuming 250 working days per year and 8 hour work days.
