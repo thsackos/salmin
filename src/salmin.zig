@@ -16,42 +16,123 @@ const assert = std.debug.assert;
 
 const MAX_PATH_LENGTH = 1024 * 8;
 const APP_NAME = "salmin";
+const CONFIG_FILE = "salmin.conf";
 
-const CurrencyCode = struct {
+const Currency = struct {
     currency_code: []const u8,
     country_and_currency: []const u8,
     symbols: []const u8,
 };
 
 const Conf = struct {
-    currency_code: []const u8 = "USD",
+    currency_code: [3]u8 = .{ 'U', 'S', 'D' },
     salary_base: f64 = 60_000.0,
     salary_top: f64 = 100_000.0,
 };
 
 pub fn main() !void {
-    var buffer: [MAX_PATH_LENGTH]u8 = undefined;
-    var fixie = std.heap.FixedBufferAllocator.init(buffer[0..]);
+    var args_buffer: [MAX_PATH_LENGTH]u8 = undefined;
+    var args_fba = std.heap.FixedBufferAllocator.init(args_buffer[0..]);
+    const args = try std.process.argsAlloc(args_fba.allocator());
 
-    const path: ?[]const u8 = std.fs.getAppDataDir(fixie.allocator(), APP_NAME) catch |e| switch (e) {
+    if (args.len < 2) {
+        print(
+            \\ ERROR: Usage `salmin <number-of-meeting-participants> [OPTIONS]`
+            \\     OPTIONS are specified as pairs, such as `--flag value`.
+            \\
+        , .{});
+        return;
+    }
+
+    var dir_path_buffer: [MAX_PATH_LENGTH]u8 = undefined;
+    var dir_fba = std.heap.FixedBufferAllocator.init(dir_path_buffer[0..]);
+
+    const dir: ?[]const u8 = std.fs.getAppDataDir(dir_fba.allocator(), APP_NAME) catch |e| switch (e) {
         error.AppDataDirUnavailable => blk: {
-            print("WARNING: Could not locate the application data directory. Continuing with defaults.", .{});
             break :blk null;
         },
         error.OutOfMemory => {
-            std.debug.panic("Unable to reserve memory for the application data directory path. Exiting.", .{});
-            unreachable;
+            print("ERROR: Unable to reserve memory for the application data directory path. Exiting.\n", .{});
+            return;
         },
     };
 
-    if (path) |p| {
-        print("Found app data directory {s}\n", .{p});
+    var conf: Conf = .{};
+    if (dir) |d| blk: {
+        const appData = std.fs.openDirAbsolute(d, .{}) catch |e| switch (e) {
+            error.FileNotFound => {
+                warn_continue_with_defaults();
+                break :blk;
+            },
+            else => return e,
+        };
+        const configFile = appData.openFile(CONFIG_FILE, .{}) catch |e| switch (e) {
+            error.FileNotFound => {
+                warn_continue_with_defaults();
+                break :blk;
+            },
+            else => return e,
+        };
+        var reader = configFile.reader();
+
+        var json_buffer: [MAX_PATH_LENGTH]u8 = undefined;
+        const size = try reader.readAll(json_buffer[0..]);
+
+        var parser_buffer: [MAX_PATH_LENGTH]u8 = undefined;
+        var parser_fba = std.heap.FixedBufferAllocator.init(parser_buffer[0..]);
+        const parsed = try std.json.parseFromSlice(Conf, parser_fba.allocator(), json_buffer[0..size], .{});
+        defer parsed.deinit();
+
+        conf = parsed.value;
+        print("Loaded saved defaults.\n", .{});
     } else {
-        print("Could not find app data directory.\n", .{});
+        warn_continue_with_defaults();
+    }
+
+    try salmin(conf, 5);
+}
+
+// Assuming 250 working days per year and 8 hour work days.
+const salaried_minutes_per_year: f64 = 250.0 * 8.0 * 60.0;
+
+fn salmin(conf: Conf, participants: u32) !void {
+    var timer = try std.time.Timer.start();
+
+    var found = false;
+    var currency: Currency = undefined;
+    for (currency_codes) |cc| {
+        if (std.mem.eql(u8, conf.currency_code[0..3], cc.currency_code[0..3])) {
+            currency = cc;
+            found = true;
+        }
+    }
+
+    if (!found) {
+        print("ERROR: Unrecognized currency code '{s}'. Exiting.\n", .{conf.currency_code});
+        return error.UnknownCurrency;
+    }
+
+    const combined_annual_salary = ((conf.salary_base + conf.salary_top) / 2) * @as(f64, @floatFromInt(participants));
+    const combined_minutely_salary = (combined_annual_salary / salaried_minutes_per_year);
+
+    while (true) {
+        std.time.sleep(1 * std.time.ns_per_s);
+
+        const time_elapsed_minutes = @as(f64, @floatFromInt(timer.read())) / std.time.ns_per_min;
+        const cost = time_elapsed_minutes * combined_minutely_salary;
+
+        print("\r", .{});
+        print("                                            ", .{});
+        print("\r", .{});
+        print("{s} {d:.2}", .{ currency.symbols, cost });
     }
 }
 
-const currency_codes: []CurrencyCode = [_]CurrencyCode{
+fn warn_continue_with_defaults() void {
+    print("WARNING: Could not locate the application data directory. Continuing with defaults.\n", .{});
+}
+
+const currency_codes: []const Currency = ([_]Currency{
     .{ .currency_code = "ALL", .country_and_currency = "Albania Lek", .symbols = "Lek" },
     .{ .currency_code = "AFN", .country_and_currency = "Afghanistan Afghani", .symbols = "؋" },
     .{ .currency_code = "ARS", .country_and_currency = "Argentina Peso", .symbols = "$" },
@@ -161,4 +242,4 @@ const currency_codes: []CurrencyCode = [_]CurrencyCode{
     .{ .currency_code = "VND", .country_and_currency = "Viet Nam Dong", .symbols = "₫" },
     .{ .currency_code = "YER", .country_and_currency = "Yemen Rial", .symbols = "﷼" },
     .{ .currency_code = "ZWD", .country_and_currency = "Zimbabwe Dollar", .symbols = "Z$" },
-};
+})[0..];
