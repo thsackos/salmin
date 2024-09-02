@@ -3,18 +3,7 @@ const std = @import("std");
 const print = std.debug.print;
 const assert = std.debug.assert;
 
-// From: https://www.xe.com/symbols/
-// Extraction:
-// ```js
-//  var [x, ...xs] = document.querySelectorAll("li.sc-d7407440-8.jHTviH")
-//  data = xs.map(e => e.childNodes)
-//      .map(c => [`${c[2].innerHTML}`, `${c[3].innerHTML}`, `${c[1].childNodes[0].text}`])
-//      .reduce((acc, v) => { acc[v[0]] = v; return acc; }, {}))
-//  data.map(d => `    .{ .currency_code = "${d[0]}", .country_and_currency = "${d[2]}", .symbols = "${d[1]}" },`)
-//      .reduce((agg, v) => agg + "\n" + v, "")
-// ```
-
-const MAX_PATH_LENGTH = 1024 * 8;
+const BUFFER_8KB = 1024 * 8;
 const APP_NAME = "salmin";
 const CONFIG_FILE = "salmin.conf";
 
@@ -37,7 +26,7 @@ const Conf = struct {
 };
 
 pub fn main() !void {
-    var args_buffer: [MAX_PATH_LENGTH]u8 = undefined;
+    var args_buffer: [BUFFER_8KB]u8 = undefined;
     var args_fba = std.heap.FixedBufferAllocator.init(args_buffer[0..]);
     const args = try std.process.argsAlloc(args_fba.allocator());
 
@@ -52,7 +41,7 @@ pub fn main() !void {
 
     const participants = try std.fmt.parseInt(u32, args[1], 10);
 
-    var dir_path_buffer: [MAX_PATH_LENGTH]u8 = undefined;
+    var dir_path_buffer: [BUFFER_8KB]u8 = undefined;
     var dir_fba = std.heap.FixedBufferAllocator.init(dir_path_buffer[0..]);
 
     const dir: ?[]const u8 = std.fs.getAppDataDir(dir_fba.allocator(), APP_NAME) catch |e| switch (e) {
@@ -83,10 +72,10 @@ pub fn main() !void {
         };
         var reader = configFile.reader();
 
-        var json_buffer: [MAX_PATH_LENGTH]u8 = undefined;
+        var json_buffer: [BUFFER_8KB]u8 = undefined;
         const size = try reader.readAll(json_buffer[0..]);
 
-        var parser_buffer: [MAX_PATH_LENGTH]u8 = undefined;
+        var parser_buffer: [BUFFER_8KB]u8 = undefined;
         var parser_fba = std.heap.FixedBufferAllocator.init(parser_buffer[0..]);
         const parsed = try std.json.parseFromSlice(Conf, parser_fba.allocator(), json_buffer[0..size], .{});
         defer parsed.deinit();
@@ -188,6 +177,16 @@ fn warn_continue_with_defaults() void {
     print("WARNING: Could not locate the application data directory. Continuing with defaults.\n", .{});
 }
 
+// From: https://www.xe.com/symbols/
+// Extracted using a little bit of javascript:
+// ```js
+//  var [x, ...xs] = document.querySelectorAll("li.sc-d7407440-8.jHTviH")
+//  data = xs.map(e => e.childNodes)
+//      .map(c => [`${c[2].innerHTML}`, `${c[3].innerHTML}`, `${c[1].childNodes[0].text}`])
+//      .reduce((acc, v) => { acc[v[0]] = v; return acc; }, {}))
+//  data.map(d => `    .{ .currency_code = "${d[0]}", .country_and_currency = "${d[2]}", .symbols = "${d[1]}" },`)
+//      .reduce((agg, v) => agg + "\n" + v, "")
+// ```
 const currency_codes: []const Currency = ([_]Currency{
     .{ .currency_code = "ALL", .country_and_currency = "Albania Lek", .symbols = "Lek" },
     .{ .currency_code = "AFN", .country_and_currency = "Afghanistan Afghani", .symbols = "؋" },

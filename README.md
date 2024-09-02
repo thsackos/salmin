@@ -2,6 +2,8 @@
 
 Track the real time cost of a meeting based on the salary paid to the participants!
 
+![Command line demo showing the cost of a meeting ticking up from a few cents to a few dollars over a few seconds](./salmin.gif)
+
 ## Usage
 
 Track the approximate cost of a five-participant meeting.
