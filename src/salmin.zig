@@ -44,6 +44,8 @@ pub fn main() !void {
         return;
     }
 
+    const participants = try std.fmt.parseInt(u32, args[1], 10);
+
     var dir_path_buffer: [MAX_PATH_LENGTH]u8 = undefined;
     var dir_fba = std.heap.FixedBufferAllocator.init(dir_path_buffer[0..]);
 
@@ -89,7 +91,41 @@ pub fn main() !void {
         warn_continue_with_defaults();
     }
 
-    try salmin(conf, 5);
+    var top_set = false;
+    var base_set = false;
+    if (args.len == 4) {
+        const v = try std.fmt.parseFloat(f64, args[3]);
+        if (std.mem.eql(u8, "--base-salary"[0..], args[2])) {
+            base_set = true;
+            conf.salary_base = v;
+        } else if (std.mem.eql(u8, "--top-salary"[0..], args[2])) {
+            top_set = true;
+            conf.salary_top = v;
+        } else {
+            return error.UnknownArgument;
+        }
+    }
+
+    if (args.len == 6) {
+        const v = try std.fmt.parseFloat(f64, args[5]);
+        if (std.mem.eql(u8, "--base-salary"[0..], args[4])) {
+            if (base_set) {
+                return error.DupliateSalaryArgument;
+            }
+
+            conf.salary_base = v;
+        } else if (std.mem.eql(u8, "--top-salary"[0..], args[4])) {
+            if (top_set) {
+                return error.DupliateSalaryArgument;
+            }
+
+            conf.salary_top = v;
+        } else {
+            return error.UnknownArgument;
+        }
+    }
+
+    try salmin(conf, participants);
 }
 
 // Assuming 250 working days per year and 8 hour work days.
