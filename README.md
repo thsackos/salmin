@@ -23,8 +23,6 @@ Configure default values:
 View defaults:
 
 ```sh
-> salmin config get currency
-> salmin config set base-salary
-> salmin config set top-salary
+> salmin config show
 ```
 
